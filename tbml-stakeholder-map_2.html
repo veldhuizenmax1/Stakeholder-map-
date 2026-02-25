@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TBML Stakeholder Network — DesignB€uro</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.26.5/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+  html, body, #root { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ─── BRAND ────────────────────────────────────────────────────────────────────
+const B = {
+  navy:      "#1E3A5F", navyLight: "#2E5080",
+  amber:     "#E8971A", amberLight:"#F5B84C",
+  white:     "#FFFFFF", offwhite:  "#F7F8FA",
+  grey100:   "#EEF0F4", grey200:   "#D4D9E2",
+  grey400:   "#8F9AAB", textSub:   "#5A6A7D",
+};
+
+// ─── CATEGORIES ───────────────────────────────────────────────────────────────
+const CATEGORIES = {
+  core:          { en:"FIOD Core",              nl:"FIOD Kern",              color:"#E8971A", bg:"#FEF3DC" },
+  "dutch-law":   { en:"Dutch Authorities",      nl:"Nederlandse Autoriteiten",color:"#1E3A5F", bg:"#E8EFF7" },
+  international: { en:"International Partners", nl:"Internationale Partners", color:"#6B4FB0", bg:"#F0EBF9" },
+  financial:     { en:"Financial Gatekeepers",  nl:"Financiële Poortwachters",color:"#0A7A6C", bg:"#DFF2EF" },
+  trade:         { en:"Trade Infrastructure",   nl:"Handelsinfrastructuur",   color:"#B84F12", bg:"#FAE9DE" },
+  criminal:      { en:"Criminal Actors",        nl:"Criminele Actoren",       color:"#B52424", bg:"#FAE8E8" },
+};
+
+// ─── LINK TYPES ───────────────────────────────────────────────────────────────
+const LINK_TYPES = {
+  operational:   { color:"#1E3A5F", dash:"none", en:"Operational",   nl:"Operationeel" },
+  intel:         { color:"#E8971A", dash:"none", en:"Intelligence",  nl:"Inlichtingen" },
+  cooperation:   { color:"#0A7A6C", dash:"none", en:"Cooperation",   nl:"Samenwerking" },
+  legal:         { color:"#6B4FB0", dash:"none", en:"Legal",         nl:"Juridisch" },
+  international: { color:"#6B4FB0", dash:"6,3",  en:"International", nl:"Internationaal" },
+  governance:    { color:"#8F9AAB", dash:"4,3",  en:"Governance",    nl:"Governance" },
+  regulatory:    { color:"#0A7A6C", dash:"6,3",  en:"Regulatory",    nl:"Regulatoir" },
+  criminal:      { color:"#B52424", dash:"5,3",  en:"Criminal",      nl:"Crimineel" },
+};
+
+// ─── UI STRINGS ───────────────────────────────────────────────────────────────
+const UI = {
+  en: {
+    subtitle:      "TBML Stakeholder Network",
+    subline:       "Trade-Based Money Laundering · FIOD Research",
+    nodeTypes:     "Node types",
+    linkTypes:     "Link types",
+    relationships: (n) => `${n} Relationships`,
+    to:            "→ to",
+    from:          "← from",
+    close:         "Click elsewhere to close",
+    hints:         ["Hover to highlight connections","Click a node to inspect","Drag to reposition","Scroll to zoom"],
+  },
+  nl: {
+    subtitle:      "TBML Stakeholdernetwerk",
+    subline:       "Handelsgerelateerd Witwassen · FIOD Onderzoek",
+    nodeTypes:     "Knooppunttypen",
+    linkTypes:     "Verbindingstypen",
+    relationships: (n) => `${n} Relaties`,
+    to:            "→ naar",
+    from:          "← van",
+    close:         "Klik ergens anders om te sluiten",
+    hints:         ["Hover om verbindingen te markeren","Klik een knooppunt om te inspecteren","Slepen om te verplaatsen","Scrollen om in te zoomen"],
+  },
+};
+
+// ─── NODES ────────────────────────────────────────────────────────────────────
+const nodes = [
+  { id:"fiod", label:{en:"FIOD",nl:"FIOD"}, category:"core", importance:3,
+    desc:{
+      en:"The Fiscal Intelligence & Investigation Service of the Netherlands. The primary investigative authority for financial crime, tax fraud, money laundering, and TBML. Uniquely combines fiscal, customs and police functions within a single organisation.",
+      nl:"De Fiscale Inlichtingen- en Opsporingsdienst. De belangrijkste opsporingsdienst voor financiële criminaliteit, belastingfraude, witwassen en HGWW. Combineert als enige dienst fiscale, douane- en politietaken binnen één organisatie." }},
+  { id:"amlc", label:{en:"AMLC",nl:"AMLC"}, category:"core", importance:2,
+    desc:{
+      en:"Anti-Money Laundering Centre — the FIOD's embedded analytical hub. Develops TBML typologies, runs data challenges, builds datasets and the AMLC Suite tooling (Browser, Matcher, Parser) to surface criminal patterns.",
+      nl:"Anti-Money Laundering Centre — het analytisch centrum van de FIOD. Ontwikkelt HGWW-typologieën, organiseert data-uitdagingen en bouwt datasets en de AMLC Suite (Browser, Matcher, Parser) om criminele patronen zichtbaar te maken." }},
+  { id:"fiu", label:{en:"FIU-NL",nl:"FIU-NL"}, category:"dutch-law", importance:3,
+    desc:{
+      en:"Financial Intelligence Unit Netherlands. Receives unusual transaction reports (UTRs) from obligated entities, analyses them, and forwards declared suspicious transactions to the FIOD, police and other agencies.",
+      nl:"Financial Intelligence Unit Nederland. Ontvangt meldingen van ongebruikelijke transacties (MOTs) van meldingsplichtige instellingen, analyseert deze en geeft verdachte transacties door aan de FIOD, politie en andere diensten." }},
+  { id:"customs", label:{en:"Dutch Customs",nl:"Douane"}, category:"dutch-law", importance:2,
+    desc:{
+      en:"Douane — controls goods at borders, ports (Rotterdam) and airports (Schiphol). Holds import/export data crucial for TBML detection, but data sharing with FIOD is legally constrained — a known structural bottleneck.",
+      nl:"De Douane — controleert goederen aan grenzen, havens (Rotterdam) en luchthavens (Schiphol). Beschikt over import-/exportdata die cruciaal zijn voor HGWW-opsporing, maar gegevensuitwisseling met de FIOD is juridisch beperkt." }},
+  { id:"om", label:{en:"Public\nProsecution",nl:"Openbaar\nMinisterie"}, category:"dutch-law", importance:2,
+    desc:{
+      en:"Openbaar Ministerie — specifically the Functioneel Parket, specialising in financial crime. The FIOD builds cases and hands them to the OM for prosecution.",
+      nl:"Het Openbaar Ministerie — specifiek het Functioneel Parket, gespecialiseerd in financiële criminaliteit. De FIOD bouwt zaken op en draagt deze over aan het OM voor vervolging." }},
+  { id:"police", label:{en:"National Police",nl:"Nationale Politie"}, category:"dutch-law", importance:2,
+    desc:{
+      en:"Collaborates with FIOD on cases where financial crime overlaps with organised crime. Also receives suspicious transaction intelligence from FIU-NL.",
+      nl:"Werkt samen met de FIOD bij zaken waarbij financiële criminaliteit overlapt met georganiseerde misdaad. Ontvangt ook inlichtingen over verdachte transacties van de FIU-NL." }},
+  { id:"mof", label:{en:"Ministry of\nFinance",nl:"Ministerie van\nFinanciën"}, category:"dutch-law", importance:1,
+    desc:{
+      en:"The FIOD's parent ministry. Sets mandate, budget and strategic priorities. The FIOD operates within the Dutch Tax and Customs Administration (Belastingdienst).",
+      nl:"Het moederministerie van de FIOD. Stelt het mandaat, het budget en de strategische prioriteiten vast. De FIOD valt onder de Belastingdienst." }},
+  { id:"europol", label:{en:"Europol",nl:"Europol"}, category:"international", importance:2,
+    desc:{
+      en:"European law enforcement coordination body. FIOD joins Europol-led operations targeting cross-border criminal networks, particularly drug cartels using TBML.",
+      nl:"Europees coördinatieorgaan voor rechtshandhaving. De FIOD neemt deel aan Europol-operaties gericht op grensoverschrijdende criminele netwerken, met name drugskartels die HGWW toepassen." }},
+  { id:"j5", label:{en:"J5 Alliance",nl:"J5 Alliantie"}, category:"international", importance:2,
+    desc:{
+      en:"Joint Chiefs of Global Tax Enforcement — AU, CA, NL, UK and US. Conducts joint intelligence operations and data challenges. The NL-UK TBML pilot on plastic waste was a notable output.",
+      nl:"Joint Chiefs of Global Tax Enforcement — AU, CA, NL, VK en VS. Voert gezamenlijke inlichtingenoperaties en data-uitdagingen uit. De NL-VK HGWW-pilot met kunststofafval was een opmerkelijk resultaat." }},
+  { id:"foreign-fiu", label:{en:"Foreign FIUs",nl:"Buitenlandse FIU's"}, category:"international", importance:1,
+    desc:{
+      en:"160+ member FIUs of the Egmont Group. FIU-NL exchanges financial intelligence via the Egmont Secure Web — essential given that TBML flows are inherently cross-border.",
+      nl:"160+ leden-FIU's van de Egmont Groep. FIU-NL wisselt financiële inlichtingen uit via het Egmont Secure Web — essentieel omdat HGWW-stromen van nature grensoverschrijdend zijn." }},
+  { id:"fatf", label:{en:"FATF",nl:"FATF"}, category:"international", importance:2,
+    desc:{
+      en:"Financial Action Task Force. The intergovernmental standard-setter for AML/CFT. Its 40 Recommendations are binding via EU directives and shape FIOD's operational priorities.",
+      nl:"Financial Action Task Force. De intergouvernementele standaardensteller voor anti-witwassen. De 40 Aanbevelingen zijn bindend via EU-richtlijnen en vormen de operationele prioriteiten van de FIOD." }},
+  { id:"amla", label:{en:"EU / AMLA",nl:"EU / AMLA"}, category:"international", importance:1,
+    desc:{
+      en:"The new EU Anti-Money Laundering Authority (operational from 2025) will coordinate FIUs across member states and directly supervise high-risk obligated entities.",
+      nl:"De nieuwe EU Anti-Witwasautoriteit (operationeel vanaf 2025) coördineert FIU's in lidstaten en houdt direct toezicht op risicovolle meldingsplichtige instellingen." }},
+  { id:"banks", label:{en:"Banks",nl:"Banken"}, category:"financial", importance:3,
+    desc:{
+      en:"Major obligated entities under the Wwft. Report unusual transactions to FIU-NL. Also the primary providers of trade finance — the instruments most exploited in TBML schemes.",
+      nl:"Belangrijke meldingsplichtige instellingen onder de Wwft. Melden ongebruikelijke transacties aan de FIU-NL. Ook de voornaamste verstrekkers van handelsfinanciering — de instrumenten die het meest worden misbruikt bij HGWW." }},
+  { id:"trade-finance", label:{en:"Trade Finance\nProviders",nl:"Handels-\nfinanciers"}, category:"financial", importance:2,
+    desc:{
+      en:"Entities facilitating import/export finance: factoring companies, export credit agencies, specialist desks. They see documentation but often lack context to spot mis-valuation or mis-description.",
+      nl:"Instellingen die import-/exportfinanciering faciliteren: factoringbedrijven, exportkredietverzekeraars, gespecialiseerde afdelingen. Zij zien documentatie maar missen vaak context om foutieve waardebepaling te herkennen." }},
+  { id:"crypto", label:{en:"Crypto\nExchanges",nl:"Crypto-\nbeurzen"}, category:"financial", importance:1,
+    desc:{
+      en:"Virtual Asset Service Providers became Wwft-obligated in 2020. A growing TBML vector, especially in layering. The FIOD's Bestmixer.io case (2019) illustrated the scale of crypto-based laundering.",
+      nl:"Virtuele-activadienstverleners zijn sinds 2020 meldingsplichtig onder de Wwft. Een groeiende HGWW-route, met name bij de layeringfase. De FIOD-zaak Bestmixer.io (2019) illustreerde de omvang van crypto-witwassen." }},
+  { id:"notaries", label:{en:"Notaries &\nAccountants",nl:"Notarissen &\nAccountants"}, category:"financial", importance:2,
+    desc:{
+      en:"Gatekeeper professions legally obligated to report unusual transactions to FIU-NL. Often involved in setting up corporate structures (shell companies, trusts) used in TBML.",
+      nl:"Poortwachtersberoepen wettelijk verplicht ongebruikelijke transacties te melden bij de FIU-NL. Vaak betrokken bij het opzetten van bedrijfsstructuren (brievenbusbedrijven, trusts) die bij HGWW worden gebruikt." }},
+  { id:"freight", label:{en:"Freight\nForwarders",nl:"Expediteurs"}, category:"trade", importance:2,
+    desc:{
+      en:"Logistics intermediaries organising shipping on behalf of exporters/importers. Often unwitting TBML enablers — they move goods and generate documentation without visibility into the financial flows.",
+      nl:"Logistieke tussenpersonen die verscheping regelen voor exporteurs/importeurs. Vaak onbewuste HGWW-facilitators — zij vervoeren goederen en genereren documentatie zonder zicht op de financiële stromen." }},
+  { id:"port", label:{en:"Port Authorities\n(AMS/RTM)",nl:"Havenautoriteiten\n(AMS/RTM)"}, category:"trade", importance:2,
+    desc:{
+      en:"Rotterdam is Europe's largest port; Schiphol is one of the world's largest cargo airports. Both are major TBML corridors. Risk-based scanning means only a fraction of containers are inspected.",
+      nl:"Rotterdam is de grootste haven van Europa; Schiphol is een van de grootste luchtvrachthavens ter wereld. Beide zijn belangrijke HGWW-corridors. Risicogebaseerde scanning betekent dat slechts een fractie van de containers wordt geïnspecteerd." }},
+  { id:"customs-brokers", label:{en:"Customs\nBrokers",nl:"Douane-\nagenten"}, category:"trade", importance:1,
+    desc:{
+      en:"Specialists who prepare customs declarations. Corrupt or negligent brokers enable mis-description and mis-valuation — a core TBML technique — by filing inaccurate paperwork that passes automated checks.",
+      nl:"Specialisten die douaneaangiften verzorgen. Corrupte of nalatige agenten maken onjuiste omschrijving en waardebepaling mogelijk — een kerntechniek van HGWW — door onjuiste documenten in te dienen die geautomatiseerde controles passeren." }},
+  { id:"criminal-networks", label:{en:"Criminal\nNetworks",nl:"Criminele\nNetwerken"}, category:"criminal", importance:3,
+    desc:{
+      en:"Drug cartels, organised fraud rings, and sanctions evaders — the originators of illicit funds. TBML is used when cash volumes become too large for simpler laundering methods.",
+      nl:"Drugskartels, georganiseerde fraudenetwerken en sanctie-ontwijkers — de bron van illegale gelden. HGWW wordt gebruikt wanneer contante bedragen te groot worden voor eenvoudigere wassersmethoden." }},
+  { id:"shell-cos", label:{en:"Shell\nCompanies",nl:"Brievenbus-\nbedrijven"}, category:"criminal", importance:2,
+    desc:{
+      en:"Corporate vehicles — often registered across jurisdictions — used to obscure beneficial ownership. A single TBML scheme may route transactions through 5–10 shells to defeat attribution.",
+      nl:"Vennootschappen — vaak geregistreerd in meerdere rechtsgebieden — om uiteindelijk begunstigden te verhullen. Één HGWW-constructie kan transacties door 5–10 brievenbusbedrijven leiden om toerekening te bemoeilijken." }},
+  { id:"ml-services", label:{en:"Professional ML\nServices",nl:"Professionele\nWassersdiensten"}, category:"criminal", importance:2,
+    desc:{
+      en:"Specialist money laundering networks that sell the capability to criminal organisations. They control trade infrastructure, manage documentation and handle financial flows — a criminal B2B service.",
+      nl:"Gespecialiseerde witwasnetwerken die hun diensten verkopen aan criminele organisaties. Zij beheren handelsinfrastructuur, documentatie en financiële stromen — een criminele B2B-dienst." }},
+  { id:"corrupt", label:{en:"Corrupt\nIntermediaries",nl:"Corrupte\nTussenpersonen"}, category:"criminal", importance:1,
+    desc:{
+      en:"Insiders within logistics, banking, customs or government bribed to enable TBML. They approve documentation, waive inspections or provide account access. Insider recruitment is a core TBML vulnerability.",
+      nl:"Insiders binnen logistiek, bankwezen, douane of overheid die worden omgekocht om HGWW mogelijk te maken. Zij keuren documenten goed, laten inspecties achterwege of verlenen toegang tot rekeningen." }},
+];
+
+// ─── LINKS ────────────────────────────────────────────────────────────────────
+const links = [
+  { source:"fiod", target:"amlc", type:"operational",
+    label:{en:"FIOD's analytical arm", nl:"Analytische arm van de FIOD"},
+    description:{en:"The AMLC is embedded within the FIOD and acts as its analytical and data science hub. It develops TBML typologies, manages datasets, and runs the AMLC Suite tools (Browser, Matcher, Parser) used by FIOD investigators.", nl:"Het AMLC is ingebed in de FIOD en fungeert als analytisch centrum. Het ontwikkelt HGWW-typologieën, beheert datasets en beheert de AMLC Suite-tools (Browser, Matcher, Parser) die door FIOD-rechercheurs worden gebruikt." }},
+  { source:"fiod", target:"fiu", type:"intel",
+    label:{en:"Intelligence pipeline", nl:"Inlichtingenpijplijn"},
+    description:{en:"FIU-NL is the FIOD's primary intelligence feed. The FIU declares transactions suspicious and forwards them to the FIOD. The FIOD can also request targeted FIU analyses during active investigations.", nl:"FIU-NL is de primaire informatiebron van de FIOD. De FIU verklaart transacties verdacht en geeft deze door aan de FIOD. De FIOD kan ook gerichte FIU-analyses aanvragen tijdens lopende onderzoeken." }},
+  { source:"fiod", target:"customs", type:"cooperation",
+    label:{en:"Data sharing (constrained)", nl:"Gegevensuitwisseling (beperkt)"},
+    description:{en:"Customs holds import/export data critical for TBML detection. However, data exchange between the two services is legally constrained — a known structural bottleneck. Improved sharing has been identified as a key intervention.", nl:"De Douane beschikt over import-/exportdata die cruciaal zijn voor HGWW-opsporing. Gegevensuitwisseling is echter juridisch beperkt — een bekend structureel knelpunt. Verbeterde uitwisseling is aangewezen als een sleutelinterventie." }},
+  { source:"fiod", target:"om", type:"legal",
+    label:{en:"Criminal case referral", nl:"Strafrechtelijke overdracht"},
+    description:{en:"The FIOD builds the evidentiary base and hands cases to the Functioneel Parket for prosecution. The OM decides whether to pursue charges and the two cooperate closely throughout.", nl:"De FIOD bouwt het bewijsfundament op en draagt zaken over aan het Functioneel Parket voor vervolging. Het OM beslist of vervolging wordt ingesteld en beide werken nauw samen gedurende het gehele traject." }},
+  { source:"fiod", target:"police", type:"cooperation",
+    label:{en:"Joint investigations", nl:"Gezamenlijke onderzoeken"},
+    description:{en:"The FIOD and National Police collaborate on cases where financial crime overlaps with organised crime. FIOD focuses on the financial layer while police handle operational elements.", nl:"De FIOD en de Nationale Politie werken samen bij zaken waarbij financiële criminaliteit overlapt met georganiseerde misdaad. De FIOD richt zich op de financiële laag, de politie op operationele elementen." }},
+  { source:"fiod", target:"europol", type:"international",
+    label:{en:"Cross-border operations", nl:"Grensoverschrijdende operaties"},
+    description:{en:"The FIOD joins Europol-coordinated operations targeting international criminal networks, providing a platform for secure intelligence sharing and operational coordination across member states.", nl:"De FIOD neemt deel aan Europol-gecoördineerde operaties gericht op internationale criminele netwerken, waarbij een platform wordt geboden voor veilige informatie-uitwisseling en operationele coördinatie." }},
+  { source:"fiod", target:"j5", type:"international",
+    label:{en:"J5 tax crime alliance", nl:"J5 belastingcriminaliteitsalliantie"},
+    description:{en:"The FIOD is the Dutch member of J5, which conducts joint intelligence operations and data challenges. The UK-NL TBML pilot on plastic waste customs data was a notable collaboration.", nl:"De FIOD is het Nederlandse lid van J5, dat gezamenlijke inlichtingenoperaties en data-uitdagingen uitvoert. De VK-NL HGWW-pilot met douanedata over kunststofafval was een opmerkelijke samenwerking." }},
+  { source:"fiod", target:"mof", type:"governance",
+    label:{en:"Mandate & oversight", nl:"Mandaat & toezicht"},
+    description:{en:"The Ministry of Finance sets the FIOD's mandate, priorities and budget. The FIOD is formally part of the Dutch Tax and Customs Administration and reports to the Ministry.", nl:"Het Ministerie van Financiën stelt het mandaat, de prioriteiten en het budget van de FIOD vast. De FIOD maakt formeel deel uit van de Belastingdienst en legt verantwoording af aan het Ministerie." }},
+  { source:"fiod", target:"banks", type:"cooperation",
+    label:{en:"'Know Your Sector' outreach", nl:"'Ken Uw Sector'-voorlichting"},
+    description:{en:"The FIOD educates banks and financial institutions on TBML typologies and red flags through its Know Your Sector programme, aiming to improve upstream detection before cases reach the FIU.", nl:"De FIOD informeert banken en financiële instellingen over HGWW-typologieën en signalen via het 'Ken Uw Sector'-programma, om vroegtijdige detectie te verbeteren voordat zaken de FIU bereiken." }},
+  { source:"fiod", target:"fatf", type:"governance",
+    label:{en:"Standards compliance", nl:"Naleving standaarden"},
+    description:{en:"FATF's 40 Recommendations shape Dutch AML legislation and FIOD's operational priorities. The Netherlands undergoes regular FATF mutual evaluations; identified gaps directly influence FIOD's resource allocation.", nl:"De 40 FATF-Aanbevelingen vormen de Nederlandse AML-wetgeving en de operationele prioriteiten van de FIOD. Nederland ondergaat regelmatige FATF-wederzijdse evaluaties; geconstateerde tekortkomingen beïnvloeden direct de inzet van FIOD-middelen." }},
+  { source:"fiu", target:"banks", type:"regulatory",
+    label:{en:"Unusual transaction reports", nl:"Meldingen ongebruikelijke transacties"},
+    description:{en:"Banks are legally obligated under the Dutch Wwft to report unusual transactions to the FIU, which declares them suspicious before forwarding actionable intelligence to the FIOD and police.", nl:"Banken zijn wettelijk verplicht op grond van de Wwft om ongebruikelijke transacties te melden bij de FIU, die deze verdacht verklaart alvorens bruikbare inlichtingen door te sturen naar de FIOD en politie." }},
+  { source:"fiu", target:"notaries", type:"regulatory",
+    label:{en:"Gatekeeper reporting", nl:"Poortwachtersmeldingen"},
+    description:{en:"Notaries, accountants, and lawyers are obligated entities under Wwft and must report unusual financial activity to FIU-NL. These professions are critical gatekeepers for TBML schemes involving corporate structuring.", nl:"Notarissen, accountants en advocaten zijn meldingsplichtige instellingen onder de Wwft en moeten ongebruikelijke financiële activiteiten melden bij FIU-NL. Deze beroepsgroepen zijn cruciale poortwachters voor HGWW-constructies." }},
+  { source:"fiu", target:"foreign-fiu", type:"international",
+    label:{en:"Egmont intelligence exchange", nl:"Egmont-inlichtingenuitwisseling"},
+    description:{en:"FIU-NL exchanges financial intelligence with partner FIUs worldwide via the Egmont Secure Web — essential given that TBML flows are inherently cross-border.", nl:"FIU-NL wisselt financiële inlichtingen uit met partner-FIU's wereldwijd via het Egmont Secure Web — essentieel omdat HGWW-stromen van nature grensoverschrijdend zijn." }},
+  { source:"fiu", target:"police", type:"intel",
+    label:{en:"STR dissemination", nl:"Verspreiding verdachte transacties"},
+    description:{en:"Suspicious transaction reports are shared with both the FIOD and National Police, depending on the nature of the underlying predicate offence (e.g. drug trafficking vs tax fraud).", nl:"Meldingen van verdachte transacties worden gedeeld met zowel de FIOD als de Nationale Politie, afhankelijk van de aard van het onderliggende gronddelict (bijv. drugshandel versus belastingfraude)." }},
+  { source:"fiu", target:"crypto", type:"regulatory",
+    label:{en:"Crypto reporting (Wwft)", nl:"Crypto-meldingen (Wwft)"},
+    description:{en:"Crypto exchanges became Wwft-obligated entities in 2020. They now submit unusual transaction reports to FIU-NL, though the sector remains a growing detection challenge.", nl:"Cryptobeurzen zijn sinds 2020 meldingsplichtig onder de Wwft. Zij dienen nu meldingen in bij FIU-NL, hoewel de sector een groeiende opsporingsuitdaging blijft." }},
+  { source:"fiu", target:"amla", type:"governance",
+    label:{en:"EU FIU coordination", nl:"EU FIU-coördinatie"},
+    description:{en:"The new EU Anti-Money Laundering Authority (AMLA) will coordinate FIUs across member states and directly supervise high-risk obligated entities, adding a pan-European layer above FIU-NL.", nl:"De nieuwe EU Anti-Witwasautoriteit (AMLA) coördineert FIU's in lidstaten en houdt direct toezicht op risicovolle meldingsplichtige instellingen, waarmee een pan-Europese laag boven FIU-NL wordt toegevoegd." }},
+  { source:"banks", target:"trade-finance", type:"operational",
+    label:{en:"Trade finance provision", nl:"Verstrekking handelsfinanciering"},
+    description:{en:"Banks underwrite letters of credit, documentary collections and open account trade — the financial instruments most vulnerable to TBML manipulation through false invoicing and mis-description.", nl:"Banken verstrekken kredietbrieven, documentaire incasso's en open rekening-handel — de financiële instrumenten die het kwetsbaarst zijn voor HGWW-manipulatie via valse facturering en onjuiste omschrijving." }},
+  { source:"trade-finance", target:"criminal-networks", type:"criminal",
+    label:{en:"Exploited for value transfer", nl:"Misbruikt voor waarde-overdracht"},
+    description:{en:"Criminal networks exploit trade finance to transfer value internationally. Over/under-invoicing is nearly invisible to finance providers who see only paperwork — not the actual goods or market prices.", nl:"Criminele netwerken misbruiken handelsfinanciering om waarde internationaal over te dragen. Over-/onderfacturering is vrijwel onzichtbaar voor financiers die alleen papierwerk zien — niet de daadwerkelijke goederen of marktprijzen." }},
+  { source:"criminal-networks", target:"shell-cos", type:"criminal",
+    label:{en:"Corporate layering", nl:"Vennootschapsconstructies"},
+    description:{en:"Shell companies are the primary TBML vehicle. A single scheme may route transactions through 5–10 shells across jurisdictions, each adding a layer of opacity to frustrate beneficial ownership attribution.", nl:"Brievenbusbedrijven zijn het primaire HGWW-instrument. Één constructie kan transacties door 5–10 vennootschappen in verschillende rechtsgebieden leiden, elk een laag ondoorzichtigheid toevoegend." }},
+  { source:"criminal-networks", target:"ml-services", type:"criminal",
+    label:{en:"Outsourced laundering", nl:"Uitbesteed witwassen"},
+    description:{en:"Large criminal organisations increasingly hire specialist ML service providers to run the trade infrastructure. This is a professional criminal B2B market — the laundering and criminal networks are often separate entities.", nl:"Grote criminele organisaties huren steeds vaker gespecialiseerde witwassersdienstverleners in om de handelsinfrastructuur te beheren. Dit is een professionele criminele B2B-markt — het witwasnetwerk en het criminele netwerk zijn vaak aparte entiteiten." }},
+  { source:"criminal-networks", target:"corrupt", type:"criminal",
+    label:{en:"Insider recruitment", nl:"Werving van insiders"},
+    description:{en:"Corrupt customs brokers, freight forwarders, bank employees and port officials are recruited to approve documentation, waive inspections or provide account access — a core TBML enabler.", nl:"Corrupte douaneagenten, expediteurs, bankmedewerkers en havenfunctionarissen worden gerekruteerd om documenten goed te keuren, inspecties te laten varen of toegang tot rekeningen te verlenen — een kernfacilitator van HGWW." }},
+  { source:"shell-cos", target:"freight", type:"criminal",
+    label:{en:"Fictitious trade logistics", nl:"Fictieve handelslogistiek"},
+    description:{en:"Shell companies commission shipments (real or fictional) through freight forwarders, generating the paper trail that gives TBML its veneer of legitimacy.", nl:"Brievenbusbedrijven geven zendingen (echt of fictief) in opdracht via expediteurs, waarmee het papieren spoor wordt gegenereerd dat HGWW een schijn van legitimiteit geeft." }},
+  { source:"shell-cos", target:"notaries", type:"criminal",
+    label:{en:"Corporate structuring", nl:"Vennootschapsoprichting"},
+    description:{en:"Notaries and lawyers are often engaged (wittingly or not) to incorporate and maintain the shell company structures that underpin TBML schemes — a key vulnerability in the gatekeeper chain.", nl:"Notarissen en advocaten worden vaak ingeschakeld (bewust of onbewust) om de brievenbusbedrijfsstructuren die aan HGWW-constructies ten grondslag liggen op te richten en te onderhouden — een kwetsbaarheid in de poortwachtersketen." }},
+  { source:"freight", target:"port", type:"operational",
+    label:{en:"Cargo operations", nl:"Vrachtoperaties"},
+    description:{en:"Freight forwarders move cargo through Dutch ports and airports. Rotterdam and Schiphol are prime TBML corridors — the sheer volume of throughput makes inspection-based detection impractical.", nl:"Expediteurs verplaatsen vracht via Nederlandse havens en luchthavens. Rotterdam en Schiphol zijn belangrijke HGWW-corridors — het enorme doorvoervolume maakt inspectiegebaseerde opsporing onpraktisch." }},
+  { source:"customs", target:"port", type:"regulatory",
+    label:{en:"Risk-based screening", nl:"Risicogebaseerde controle"},
+    description:{en:"Dutch Customs screens containers and cargo using risk-based targeting. Only a small fraction are physically inspected — TBML schemes exploit this by deliberately appearing low-risk.", nl:"De Douane screent containers en vracht via risicogebaseerde selectie. Slechts een kleine fractie wordt fysiek geïnspecteerd — HGWW-constructies maken hier misbruik van door bewust laag-risico te lijken." }},
+  { source:"customs-brokers", target:"customs", type:"operational",
+    label:{en:"Declaration filing", nl:"Aangifteindienen"},
+    description:{en:"Customs brokers prepare and file import/export declarations. Corrupt or negligent brokers enable mis-description and mis-valuation by filing inaccurate paperwork that passes automated checks.", nl:"Douaneagenten stellen import-/exportaangiften op en dienen deze in. Corrupte of nalatige agenten maken onjuiste omschrijving en waardebepaling mogelijk door onnauwkeurige documenten in te dienen die geautomatiseerde controles passeren." }},
+];
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function getRadius(d) { return d.importance === 3 ? 30 : d.importance === 2 ? 21 : 15; }
+function getConnected(id) {
+  const s = new Set();
+  links.forEach(l => { if (l.source===id) s.add(l.target); if (l.target===id) s.add(l.source); });
+  return s;
+}
+
+// ─── TOGGLE COMPONENT ────────────────────────────────────────────────────────
+function LangToggle({ lang, setLang }) {
+  const isNL = lang === "nl";
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+      <span style={{ color: isNL ? B.grey400 : B.navy, fontSize:11, fontWeight: isNL ? 500 : 700, transition:"all 0.2s" }}>EN</span>
+      <div
+        onClick={() => setLang(isNL ? "en" : "nl")}
+        style={{
+          width:46, height:24, borderRadius:12, cursor:"pointer", position:"relative",
+          background: isNL ? B.navy : B.grey200,
+          border:`2px solid ${isNL ? B.navy : B.grey200}`,
+          transition:"background 0.25s, border-color 0.25s",
+          flexShrink:0,
+        }}
+      >
+        <div style={{
+          position:"absolute", top:2, left: isNL ? 22 : 2,
+          width:16, height:16, borderRadius:"50%",
+          background: isNL ? B.amber : B.white,
+          boxShadow:"0 1px 4px rgba(0,0,0,0.2)",
+          transition:"left 0.25s, background 0.25s",
+        }}/>
+      </div>
+      <span style={{ color: isNL ? B.navy : B.grey400, fontSize:11, fontWeight: isNL ? 700 : 500, transition:"all 0.2s" }}>NL</span>
+    </div>
+  );
+}
+
+function AnimToggle({ animOn, setAnimOn }) {
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+      <span style={{ color: animOn ? B.grey400 : B.navy, fontSize:11, fontWeight: animOn ? 500 : 700, transition:"all 0.2s" }}>OFF</span>
+      <div
+        onClick={() => setAnimOn(p => !p)}
+        style={{
+          width:46, height:24, borderRadius:12, cursor:"pointer", position:"relative",
+          background: animOn ? B.navy : B.grey200,
+          border:`2px solid ${animOn ? B.navy : B.grey200}`,
+          transition:"background 0.25s, border-color 0.25s",
+          flexShrink:0,
+        }}
+      >
+        <div style={{
+          position:"absolute", top:2, left: animOn ? 22 : 2,
+          width:16, height:16, borderRadius:"50%",
+          background: animOn ? B.amber : B.white,
+          boxShadow:"0 1px 4px rgba(0,0,0,0.2)",
+          transition:"left 0.25s, background 0.25s",
+        }}/>
+      </div>
+      <span style={{ color: animOn ? B.navy : B.grey400, fontSize:11, fontWeight: animOn ? 700 : 500, transition:"all 0.2s" }}>ON</span>
+    </div>
+  );
+}
+
+// ─── MAIN ─────────────────────────────────────────────────────────────────────
+function TBMLStakeholderMap() {
+  const svgRef       = useRef(null);
+  const containerRef = useRef(null);
+  const [selected, setSelected] = useState(null);
+  const [tooltip,  setTooltip]  = useState(null);
+  const [lang,     setLang]     = useState("en");
+  const [animOn,   setAnimOn]   = useState(true);
+  const [showDiscuss, setShowDiscuss] = useState(false);
+  const animOnRef = useRef(true);
+  useEffect(() => { animOnRef.current = animOn; }, [animOn]);
+  const [warnedNodes, setWarnedNodes] = useState(new Set());
+  const [warnedLinks, setWarnedLinks] = useState(new Set());
+  const [warningsAvail, setWarningsAvail] = useState([true, true, true]);
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragPos, setDragPos] = useState(null);
+  const simDataRef = useRef({ nodes: [], links: [] });
+  const zoomTransformRef = useRef(d3.zoomIdentity);
+  const nodeElRef = useRef(null);
+  const linkElRef = useRef(null);
+  const warnNodesRef = useRef(new Set());
+  const warnLinksRef = useRef(new Set());
+  useEffect(() => { warnNodesRef.current = warnedNodes; }, [warnedNodes]);
+  useEffect(() => { warnLinksRef.current = warnedLinks; }, [warnedLinks]);
+  const t = UI[lang];
+
+  const ptSegDist = useCallback((px,py,ax,ay,bx,by) => {
+    const dx=bx-ax, dy=by-ay, len2=dx*dx+dy*dy;
+    const t2=Math.max(0,Math.min(1,len2?((px-ax)*dx+(py-ay)*dy)/len2:0));
+    return Math.sqrt((ax+t2*dx-px)**2+(ay+t2*dy-py)**2);
+  }, []);
+
+  const handleWarningDrop = useCallback((clientX, clientY) => {
+    const svgEl = svgRef.current;
+    if (!svgEl) return false;
+    const rect = svgEl.getBoundingClientRect();
+    const svgX = clientX - rect.left, svgY = clientY - rect.top;
+    const zt = zoomTransformRef.current;
+    const dataX = (svgX - zt.x) / zt.k, dataY = (svgY - zt.y) / zt.k;
+    const { nodes: sn, links: sl } = simDataRef.current;
+    for (const n of sn) {
+      if (Math.sqrt((n.x-dataX)**2+(n.y-dataY)**2) < getRadius(n)+12) {
+        setWarnedNodes(prev => new Set([...prev, n.id]));
+        return true;
+      }
+    }
+    for (const l of sl) {
+      if (ptSegDist(dataX,dataY,l.source.x,l.source.y,l.target.x,l.target.y) < 14) {
+        setWarnedLinks(prev => new Set([...prev, `${l.source.id}-${l.target.id}`]));
+        return true;
+      }
+    }
+    return false;
+  }, [ptSegDist]);
+
+  const resetWarnings = useCallback(() => {
+    setWarnedNodes(new Set()); setWarnedLinks(new Set()); setWarningsAvail([true,true,true]);
+  }, []);
+
+  useEffect(() => {
+    if (dragIdx === null) return;
+    const onMove = e => setDragPos({ x:e.clientX, y:e.clientY });
+    const onUp = e => {
+      const hit = handleWarningDrop(e.clientX, e.clientY);
+      if (hit) setWarningsAvail(prev => { const n=[...prev]; n[dragIdx]=false; return n; });
+      setDragIdx(null); setDragPos(null);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+  }, [dragIdx, handleWarningDrop]);
+
+  // Apply warning visuals to D3 elements
+  useEffect(() => {
+    if (nodeElRef.current) {
+      nodeElRef.current.select("circle:nth-child(2)")
+        .attr("filter", d => warnedNodes.has(d.id) ? "url(#warn-filter)" : null);
+    }
+    if (linkElRef.current) {
+      linkElRef.current
+        .attr("filter", d => warnedLinks.has(`${d.source.id}-${d.target.id}`) ? "url(#warn-filter)" : null)
+        .attr("stroke-opacity", d => warnedLinks.has(`${d.source.id}-${d.target.id}`) ? 0.9 : 0.2)
+        .attr("stroke-width", d => warnedLinks.has(`${d.source.id}-${d.target.id}`) ? 4 : 1.8);
+    }
+  }, [warnedNodes, warnedLinks]);
+
+  const handleClick = useCallback(d => {
+    setSelected(p => p?.id === d.id ? null : d);
+  }, []);
+
+  useEffect(() => {
+    if (!svgRef.current || !containerRef.current) return;
+    const W = containerRef.current.offsetWidth;
+    const H = containerRef.current.offsetHeight;
+    const svg = d3.select(svgRef.current);
+    svg.selectAll("*").remove();
+    svg.attr("width", W).attr("height", H);
+
+    svg.append("rect").attr("width", W).attr("height", H).attr("fill", B.offwhite);
+
+    const pat = svg.append("defs").append("pattern")
+      .attr("id","dotgrid").attr("width",32).attr("height",32).attr("patternUnits","userSpaceOnUse");
+    pat.append("circle").attr("cx",1).attr("cy",1).attr("r",1).attr("fill",B.grey200).attr("opacity",0.7);
+    const warnFilter = svg.select("defs").append("filter").attr("id","warn-filter").attr("x","-80%").attr("y","-80%").attr("width","260%").attr("height","260%");
+    warnFilter.append("feGaussianBlur").attr("in","SourceAlpha").attr("stdDeviation",8).attr("result","blur1");
+    warnFilter.append("feFlood").attr("flood-color",B.amber).attr("flood-opacity",0.85).attr("result","color1");
+    warnFilter.append("feComposite").attr("in","color1").attr("in2","blur1").attr("operator","in").attr("result","glow1");
+    warnFilter.append("feGaussianBlur").attr("in","SourceAlpha").attr("stdDeviation",18).attr("result","blur2");
+    warnFilter.append("feFlood").attr("flood-color",B.amber).attr("flood-opacity",0.5).attr("result","color2");
+    warnFilter.append("feComposite").attr("in","color2").attr("in2","blur2").attr("operator","in").attr("result","glow2");
+    const wfMerge = warnFilter.append("feMerge");
+    wfMerge.append("feMergeNode").attr("in","glow2");
+    wfMerge.append("feMergeNode").attr("in","glow1");
+    wfMerge.append("feMergeNode").attr("in","SourceGraphic");
+    svg.append("rect").attr("width",W).attr("height",H).attr("fill","url(#dotgrid)");
+
+    const mainG = svg.append("g");
+    svg.call(d3.zoom().scaleExtent([0.3,3]).on("zoom", e => { mainG.attr("transform", e.transform); zoomTransformRef.current = e.transform; }));
+    svg.on("click", () => setSelected(null));
+
+    const simNodes = nodes.map(d => ({...d}));
+    const byId = Object.fromEntries(simNodes.map(n => [n.id, n]));
+    const simLinks = links.map(d => ({...d, source:byId[d.source], target:byId[d.target]}));
+
+    const sim = d3.forceSimulation(simNodes)
+      .force("link", d3.forceLink(simLinks).id(d=>d.id).distance(d => 110+(3-d.source.importance)*18+(3-d.target.importance)*18).strength(0.45))
+      .force("charge", d3.forceManyBody().strength(d => -320*d.importance))
+      .force("center", d3.forceCenter(W/2, H/2))
+      .force("collision", d3.forceCollide(d => getRadius(d)+24))
+      .force("x", d3.forceX(W/2).strength(0.03))
+      .force("y", d3.forceY(H/2).strength(0.03));
+
+    const linkEl = mainG.append("g").selectAll("line").data(simLinks).enter().append("line")
+      .attr("stroke", d => LINK_TYPES[d.type].color)
+      .attr("stroke-opacity", 0.2).attr("stroke-width", 1.8)
+      .attr("stroke-dasharray", d => LINK_TYPES[d.type].dash);
+
+    // ─── ANIMATED ARROWS ──────────────────────────────────────────────────
+    const BIDI_TYPES = new Set(["cooperation","international","intel"]);
+    const NUM_ARROWS = 3;
+    const arrowData = [];
+    simLinks.forEach(link => {
+      const isBidi = BIDI_TYPES.has(link.type);
+      for (let i = 0; i < NUM_ARROWS; i++) {
+        arrowData.push({ link, dir:1, phase:i/NUM_ARROWS, color: isBidi ? B.navy : LINK_TYPES[link.type].color });
+        if (isBidi) {
+          arrowData.push({ link, dir:-1, phase:i/NUM_ARROWS, color: B.amber });
+        }
+      }
+    });
+    const arrowG = mainG.append("g").attr("pointer-events","none");
+    const arrows = arrowG.selectAll("polygon").data(arrowData).enter()
+      .append("polygon").attr("points","-3.5,-2.5 3.5,0 -3.5,2.5")
+      .attr("fill", d => d.color).attr("opacity",0);
+
+    const arrowTimer = d3.timer((elapsed) => {
+      const isOn = animOnRef.current;
+      const cycle = 4000;
+      arrows.attr("transform", d => {
+        if (!isOn) return "translate(-9999,-9999)";
+        const s = d.link.source, tg = d.link.target;
+        const dx = tg.x - s.x, dy = tg.y - s.y;
+        const len = Math.sqrt(dx*dx+dy*dy);
+        if (len < 1) return "translate(-9999,-9999)";
+        const rSrc = getRadius(s)+6, rTgt = getRadius(tg)+6;
+        if (len < rSrc+rTgt+10) return "translate(-9999,-9999)";
+        const raw = ((elapsed % cycle) / cycle + d.phase) % 1;
+        const t = rSrc/len + raw * (1 - (rSrc+rTgt)/len);
+        const progress = d.dir === 1 ? t : 1 - t;
+        const x = s.x + dx * progress;
+        const y = s.y + dy * progress;
+        const angle = (d.dir === 1 ? Math.atan2(dy,dx) : Math.atan2(-dy,-dx)) * 180 / Math.PI;
+        return `translate(${x},${y}) rotate(${angle})`;
+      }).attr("opacity", d => {
+        if (!isOn) return 0;
+        const s = d.link.source, tg = d.link.target;
+        const len = Math.sqrt((tg.x-s.x)**2+(tg.y-s.y)**2);
+        return len < getRadius(s)+getRadius(tg)+20 ? 0 : 0.55;
+      });
+    });
+
+    const nodeEl = mainG.append("g").selectAll("g.node").data(simNodes).enter()
+      .append("g").attr("class","node").attr("cursor","pointer");
+
+    nodeEl.append("circle")
+      .attr("r", d => getRadius(d)+1).attr("cx",2).attr("cy",3)
+      .attr("fill",B.grey200).attr("opacity",0.45);
+
+    nodeEl.append("circle")
+      .attr("r", d => getRadius(d))
+      .attr("fill", d => CATEGORIES[d.category].bg)
+      .attr("stroke", d => CATEGORIES[d.category].color)
+      .attr("stroke-width", d => d.importance===3 ? 3 : 2);
+
+    nodeEl.filter(d => d.id==="fiod").append("circle")
+      .attr("r", d => getRadius(d)+8).attr("fill","none")
+      .attr("stroke",B.amber).attr("stroke-width",2.5)
+      .attr("stroke-opacity",0.45).attr("stroke-dasharray","5,3");
+
+    // Labels use lang-specific text
+    nodeEl.each(function(d) {
+      const el = d3.select(this);
+      const lbl = d.label[lang];
+      const lines = lbl.split("\n");
+      const fs = d.importance===3 ? 11.5 : d.importance===2 ? 10 : 8.5;
+      const txt = el.append("text")
+        .attr("text-anchor","middle").attr("dominant-baseline","central")
+        .attr("fill", CATEGORIES[d.category].color)
+        .attr("font-size",`${fs}px`)
+        .attr("font-family","'DM Sans','Nunito',sans-serif")
+        .attr("font-weight", d.importance===3 ? "700":"600")
+        .attr("pointer-events","none");
+      if (lines.length===1) {
+        txt.text(lbl);
+      } else {
+        lines.forEach((l,i) => txt.append("tspan").attr("x",0).attr("dy", i===0 ? `${-(lines.length-1)*6}px`:"13px").text(l));
+      }
+    });
+
+    nodeEl
+      .on("mouseover", function(event,d) {
+        const conn = getConnected(d.id); conn.add(d.id);
+        const wl = warnLinksRef.current;
+        linkEl.attr("stroke-opacity", l => {
+                const wk = `${l.source.id}-${l.target.id}`;
+                if (l.source.id===d.id||l.target.id===d.id) return 0.85;
+                return wl.has(wk) ? 0.9 : 0.04;
+              })
+              .attr("stroke-width", l => {
+                const wk = `${l.source.id}-${l.target.id}`;
+                if (l.source.id===d.id||l.target.id===d.id) return 3;
+                return wl.has(wk) ? 4 : 1.8;
+              })
+              .attr("filter", l => wl.has(`${l.source.id}-${l.target.id}`) ? "url(#warn-filter)" : null);
+        nodeEl.select("circle:nth-child(2)")
+          .attr("fill", n => conn.has(n.id) ? CATEGORIES[n.category].bg : B.white)
+          .attr("stroke-opacity", n => conn.has(n.id) ? 1:0.2);
+        setTooltip({ label: d.label[lang].replace("\n"," "), x:event.clientX, y:event.clientY });
+      })
+      .on("mousemove", (e) => setTooltip(p => p ? {...p, x:e.clientX, y:e.clientY} : null))
+      .on("mouseout", function() {
+        const wl = warnLinksRef.current;
+        linkEl.attr("stroke-opacity", l => wl.has(`${l.source.id}-${l.target.id}`) ? 0.9 : 0.2)
+              .attr("stroke-width", l => wl.has(`${l.source.id}-${l.target.id}`) ? 4 : 1.8)
+              .attr("filter", l => wl.has(`${l.source.id}-${l.target.id}`) ? "url(#warn-filter)" : null);
+        nodeEl.select("circle:nth-child(2)").attr("fill", d => CATEGORIES[d.category].bg).attr("stroke-opacity",1);
+        setTooltip(null);
+      })
+      .on("click", function(event,d) { event.stopPropagation(); handleClick(d); })
+      .on("dblclick", function(event,d) { if (d.id==="fiod") { event.stopPropagation(); setShowDiscuss(true); }});
+
+    nodeEl.call(d3.drag()
+      .on("start",(e,d)=>{ if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on("drag", (e,d)=>{ d.fx=e.x; d.fy=e.y; })
+      .on("end",  (e,d)=>{ if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }));
+
+    sim.on("tick", () => {
+      linkEl.attr("x1",d=>d.source.x).attr("y1",d=>d.source.y)
+            .attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
+      nodeEl.attr("transform",d=>`translate(${d.x},${d.y})`);
+    });
+
+    // Store refs for warning system
+    nodeElRef.current = nodeEl;
+    linkElRef.current = linkEl;
+    simDataRef.current = { nodes: simNodes, links: simLinks };
+    zoomTransformRef.current = d3.zoomIdentity;
+
+    // Re-apply warnings after D3 re-render
+    nodeEl.select("circle:nth-child(2)").attr("filter", d => warnNodesRef.current.has(d.id) ? "url(#warn-filter)" : null);
+    linkEl.attr("filter", d => warnLinksRef.current.has(`${d.source.id}-${d.target.id}`) ? "url(#warn-filter)" : null)
+          .attr("stroke-opacity", d => warnLinksRef.current.has(`${d.source.id}-${d.target.id}`) ? 0.9 : 0.2)
+          .attr("stroke-width", d => warnLinksRef.current.has(`${d.source.id}-${d.target.id}`) ? 4 : 1.8);
+
+    return () => { sim.stop(); arrowTimer.stop(); };
+  }, [handleClick, lang]); // re-render labels when lang changes
+
+  const panelNode  = selected ? nodes.find(n => n.id===selected.id) : null;
+  const panelLinks = panelNode
+    ? links.filter(l => l.source===panelNode.id||l.target===panelNode.id)
+        .map(l => ({...l, other: nodes.find(n => n.id===(l.source===panelNode.id?l.target:l.source))}))
+    : [];
+
+  return (
+    <div style={{ width:"100vw", height:"100vh", background:B.offwhite, display:"flex", flexDirection:"column", overflow:"hidden", fontFamily:"'DM Sans','Nunito',sans-serif" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&display=swap');
+        * { box-sizing:border-box; margin:0; padding:0; }
+        ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-track{background:${B.grey100}} ::-webkit-scrollbar-thumb{background:${B.grey200};border-radius:2px}
+        @keyframes slideIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
+        @keyframes discussIn{0%{opacity:0;transform:scale(1.08)}60%{opacity:0.6;transform:scale(1.02)}100%{opacity:1;transform:scale(1)}}
+        @keyframes qFadeIn{from{opacity:0;transform:translateY(18px) scale(0.95)}to{opacity:1;transform:translateY(0) scale(1)}}
+        @keyframes titleFadeIn{from{opacity:0;transform:translate(-50%,-50%) scale(0.9)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+        @keyframes qFloat0{0%,100%{transform:translate(0,0)}25%{transform:translate(4px,-5px)}50%{transform:translate(-3px,-9px)}75%{transform:translate(-5px,-2px)}}
+        @keyframes qFloat1{0%,100%{transform:translate(0,0)}25%{transform:translate(-5px,4px)}50%{transform:translate(3px,8px)}75%{transform:translate(7px,-2px)}}
+        @keyframes qFloat2{0%,100%{transform:translate(0,0)}25%{transform:translate(6px,3px)}50%{transform:translate(-4px,-5px)}75%{transform:translate(-2px,6px)}}
+        @keyframes qFloat3{0%,100%{transform:translate(0,0)}25%{transform:translate(-3px,-6px)}50%{transform:translate(5px,4px)}75%{transform:translate(4px,-4px)}}
+        @keyframes titlePulse{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.02)}}
+      `}</style>
+
+      {/* ═══ HEADER ═══ */}
+      <header style={{
+        background:B.white, borderBottom:`3px solid ${B.navy}`,
+        padding:"14px 28px", flexShrink:0,
+        boxShadow:"0 2px 14px rgba(30,58,95,0.09)", position:"relative", zIndex:20
+      }}>
+        {/* Top row — brand + toggle */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+            <svg width="40" height="30" viewBox="0 0 40 30" fill="none">
+              {[0,5,10,15,20,25].map((y,i)=>(
+                <rect key={i} x={0} y={y} width={[22,16,12,12,16,22][i]} height={3.5} rx={1.8} fill={B.navy}/>
+              ))}
+              {[0,5,10,15,20,25].map((y,i)=>(
+                <rect key={i} x={26} y={y} width={[14,10,14,14,10,14][i]} height={3.5} rx={1.8} fill={B.amber}/>
+              ))}
+            </svg>
+            <div style={{ display:"flex", alignItems:"baseline" }}>
+              <span style={{ color:B.navy, fontWeight:800, fontSize:18, letterSpacing:"-0.02em" }}>Design</span>
+              <span style={{ color:B.amber, fontWeight:800, fontSize:18 }}>B€</span>
+              <span style={{ color:B.navy, fontWeight:800, fontSize:18 }}>uro</span>
+            </div>
+            <div style={{ width:1, height:30, background:B.grey200, margin:"0 10px" }}/>
+            <div>
+              <div style={{ color:B.navy, fontWeight:700, fontSize:12.5, letterSpacing:"0.05em", textTransform:"uppercase" }}>{t.subtitle}</div>
+              <div style={{ color:B.grey400, fontSize:10, fontWeight:400 }}>{t.subline}</div>
+            </div>
+          </div>
+
+          {/* Toggles — upper right */}
+          <div style={{ display:"flex", alignItems:"center", gap:20 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ color:B.grey400, fontSize:9, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase" }}>Flow</span>
+              <AnimToggle animOn={animOn} setAnimOn={setAnimOn} />
+            </div>
+            <div style={{ width:1, height:22, background:B.grey200 }}/>
+            <LangToggle lang={lang} setLang={setLang} />
+          </div>
+        </div>
+
+        {/* Bottom row — node type legend */}
+        <div style={{ display:"flex", alignItems:"center", gap:8, paddingTop:10, borderTop:`1px solid ${B.grey100}` }}>
+          <span style={{ color:B.grey400, fontSize:9, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", marginRight:6, whiteSpace:"nowrap" }}>{t.nodeTypes}</span>
+          <div style={{ display:"flex", gap:18, alignItems:"center", flexWrap:"wrap" }}>
+            {Object.entries(CATEGORIES).map(([k,v])=>(
+              <div key={k} style={{ display:"flex", alignItems:"center", gap:7 }}>
+                <div style={{ width:11, height:11, borderRadius:"50%", background:v.bg, border:`2px solid ${v.color}`, flexShrink:0 }}/>
+                <span style={{ color:B.textSub, fontSize:10, fontWeight:600, letterSpacing:"0.03em", whiteSpace:"nowrap" }}>{v[lang]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      {/* ═══ LINK TYPE STRIP ═══ */}
+      <div style={{ background:B.navy, padding:"10px 28px", flexShrink:0, borderBottom:`1px solid rgba(255,255,255,0.08)` }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+          <span style={{ color:B.amberLight, fontSize:9, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase" }}>{t.linkTypes}</span>
+          <div style={{ flex:1, height:1, background:"rgba(255,255,255,0.1)" }}/>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"7px 28px" }}>
+          {Object.entries(LINK_TYPES).map(([k,v])=>(
+            <div key={k} style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <svg width="26" height="8" style={{ flexShrink:0 }}>
+                <line x1="0" y1="4" x2="26" y2="4" stroke={v.color} strokeWidth="2.5" strokeDasharray={v.dash} strokeLinecap="round"/>
+              </svg>
+              <span style={{ color:B.white, fontSize:10, fontWeight:500, letterSpacing:"0.02em", whiteSpace:"nowrap" }}>{v[lang]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ═══ GRAPH ═══ */}
+      <div ref={containerRef} style={{ flex:1, position:"relative", overflow:"hidden" }}>
+        <svg ref={svgRef} style={{ width:"100%", height:"100%", display:"block" }}/>
+
+        {/* Corner decorations */}
+        <div style={{ position:"absolute", top:14, right:16, pointerEvents:"none", display:"flex", flexDirection:"column", gap:5, opacity:0.22 }}>
+          {[[B.amber,60],[B.navy,46],[B.amber,70],[B.navy,38],[B.amber,54],[B.navy,30]].map(([c,w],i)=>(
+            <div key={i} style={{ width:w, height:4, background:c, borderRadius:2 }}/>
+          ))}
+        </div>
+        <div style={{ position:"absolute", bottom:44, left:16, pointerEvents:"none", display:"flex", flexDirection:"column", gap:5, opacity:0.18 }}>
+          {[[B.navy,52],[B.amber,40],[B.navy,62],[B.amber,34],[B.navy,48],[B.amber,28]].map(([c,w],i)=>(
+            <div key={i} style={{ width:w, height:4, background:c, borderRadius:2 }}/>
+          ))}
+        </div>
+
+        {/* ═══ WARNING PANEL ═══ */}
+        <div style={{
+          position:"absolute", top:14, left:16, zIndex:15,
+          background:`${B.white}F0`, backdropFilter:"blur(8px)",
+          border:`1px solid ${B.grey200}`, borderRadius:12,
+          padding:"12px 14px", display:"flex", flexDirection:"column", alignItems:"center", gap:10,
+          boxShadow:"0 2px 12px rgba(30,58,95,0.08)",
+        }}>
+          <span style={{ color:B.navy, fontSize:8.5, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase" }}>
+            {lang==="nl"?"Waarschuwingen":"Warnings"}
+          </span>
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            {warningsAvail.map((avail,i) => (
+              <div
+                key={i}
+                onMouseDown={e => { if (avail) { e.preventDefault(); setDragIdx(i); setDragPos({x:e.clientX,y:e.clientY}); }}}
+                style={{
+                  width:28, height:28, cursor: avail ? "grab" : "default", opacity: avail ? 1 : 0.2,
+                  display:"flex", alignItems:"center", justifyContent:"center", transition:"opacity 0.3s",
+                  userSelect:"none",
+                }}
+              >
+                <svg width="24" height="22" viewBox="0 0 24 22">
+                  <polygon points="12,1 23,21 1,21" fill={avail ? B.amber : B.grey200} stroke={avail ? B.navy : B.grey400} strokeWidth="1.5" strokeLinejoin="round"/>
+                  <text x="12" y="17" textAnchor="middle" fill={avail ? B.navy : B.grey400} fontSize="12" fontWeight="800" fontFamily="'DM Sans',sans-serif">!</text>
+                </svg>
+              </div>
+            ))}
+          </div>
+          {(!warningsAvail[0]||!warningsAvail[1]||!warningsAvail[2]) && (
+            <div
+              onClick={resetWarnings}
+              style={{
+                cursor:"pointer", fontSize:8.5, fontWeight:700, color:B.navy,
+                letterSpacing:"0.08em", textTransform:"uppercase",
+                background:B.grey100, borderRadius:6, padding:"4px 10px",
+                border:`1px solid ${B.grey200}`, transition:"all 0.2s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background=B.navy; e.currentTarget.style.color=B.white; }}
+              onMouseLeave={e => { e.currentTarget.style.background=B.grey100; e.currentTarget.style.color=B.navy; }}
+            >
+              {lang==="nl"?"Reset":"Reset"}
+            </div>
+          )}
+        </div>
+
+        {/* Drag ghost */}
+        {dragIdx !== null && dragPos && (
+          <div style={{
+            position:"fixed", left:dragPos.x-14, top:dragPos.y-13, zIndex:999,
+            pointerEvents:"none", opacity:0.85,
+          }}>
+            <svg width="28" height="26" viewBox="0 0 24 22">
+              <polygon points="12,1 23,21 1,21" fill={B.amber} stroke={B.navy} strokeWidth="1.5" strokeLinejoin="round"/>
+              <text x="12" y="17" textAnchor="middle" fill={B.navy} fontSize="12" fontWeight="800" fontFamily="'DM Sans',sans-serif">!</text>
+            </svg>
+          </div>
+        )}
+
+        {/* Tooltip */}
+        {tooltip && (
+          <div style={{
+            position:"fixed", left:tooltip.x+14, top:tooltip.y-10, zIndex:30,
+            background:B.navy, color:B.white, fontSize:11, fontWeight:500,
+            padding:"5px 12px", borderRadius:6, pointerEvents:"none",
+            boxShadow:"0 4px 16px rgba(30,58,95,0.25)"
+          }}>
+            {tooltip.label}
+          </div>
+        )}
+
+        {/* ═══ DETAIL PANEL ═══ */}
+        {panelNode && (
+          <div style={{
+            position:"absolute", right:0, top:0, bottom:0, width:370,
+            background:B.white, borderLeft:`3px solid ${B.navy}`,
+            overflowY:"auto", animation:"slideIn 0.22s ease-out", zIndex:10,
+            boxShadow:"-4px 0 24px rgba(30,58,95,0.12)"
+          }}>
+            <div style={{ height:5, background:`linear-gradient(90deg, ${B.navy} 0%, ${B.amber} 100%)` }}/>
+            <div style={{ padding:"22px 24px 36px" }}>
+
+              {/* Category pill */}
+              <div style={{
+                display:"inline-flex", alignItems:"center", gap:7, marginBottom:14,
+                background:CATEGORIES[panelNode.category].bg,
+                border:`1px solid ${CATEGORIES[panelNode.category].color}35`,
+                borderRadius:20, padding:"4px 12px"
+              }}>
+                <div style={{ width:7, height:7, borderRadius:"50%", background:CATEGORIES[panelNode.category].color }}/>
+                <span style={{ color:CATEGORIES[panelNode.category].color, fontSize:9.5, fontWeight:700, letterSpacing:"0.07em", textTransform:"uppercase" }}>
+                  {CATEGORIES[panelNode.category][lang]}
+                </span>
+              </div>
+
+              <h2 style={{ color:B.navy, fontSize:24, fontWeight:800, margin:"0 0 12px 0", letterSpacing:"-0.02em", lineHeight:1.15 }}>
+                {panelNode.label[lang].replace("\n"," ")}
+              </h2>
+
+              <p style={{ color:B.textSub, fontSize:12.5, lineHeight:1.75, margin:"0 0 22px 0", fontWeight:400 }}>
+                {panelNode.desc[lang]}
+              </p>
+
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+                <div style={{ height:2, background:B.grey100, flex:1 }}/>
+                <span style={{ color:B.grey400, fontSize:9, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", whiteSpace:"nowrap" }}>
+                  {t.relationships(panelLinks.length)}
+                </span>
+                <div style={{ height:2, background:B.grey100, flex:1 }}/>
+              </div>
+
+              {panelLinks.map((link,i)=>{
+                const lt = LINK_TYPES[link.type];
+                const isSrc = link.source===panelNode.id;
+                return (
+                  <div key={i} style={{ marginBottom:12, borderRadius:10, overflow:"hidden", border:`1px solid ${B.grey100}`, boxShadow:"0 1px 5px rgba(30,58,95,0.06)" }}>
+                    <div style={{ height:3, background:lt.color }}/>
+                    <div style={{ padding:"12px 14px" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+                        <div style={{ background:isSrc?B.navy:B.grey100, color:isSrc?B.white:B.navy, fontSize:8.5, fontWeight:700, letterSpacing:"0.08em", padding:"2px 8px", borderRadius:4, textTransform:"uppercase" }}>
+                          {isSrc ? t.to : t.from}
+                        </div>
+                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          <div style={{ width:8, height:8, borderRadius:"50%", background:CATEGORIES[link.other.category].color }}/>
+                          <span style={{ color:B.navy, fontSize:11.5, fontWeight:700 }}>
+                            {link.other.label[lang].replace("\n"," ")}
+                          </span>
+                        </div>
+                        <div style={{ marginLeft:"auto", background:`${lt.color}15`, border:`1px solid ${lt.color}40`, color:lt.color, fontSize:8.5, fontWeight:600, padding:"2px 9px", borderRadius:12, textTransform:"uppercase", letterSpacing:"0.05em" }}>
+                          {lt[lang]}
+                        </div>
+                      </div>
+                      <div style={{ color:B.navy, fontSize:11, fontWeight:700, marginBottom:5 }}>{link.label[lang]}</div>
+                      <div style={{ color:B.textSub, fontSize:10.5, lineHeight:1.65 }}>{link.description[lang]}</div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div style={{ marginTop:16, color:B.grey200, fontSize:9.5, textAlign:"center", letterSpacing:"0.06em" }}>
+                {t.close}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom hints */}
+        {!panelNode && (
+          <div style={{ position:"absolute", bottom:0, left:0, right:0, background:B.white, borderTop:`1px solid ${B.grey100}`, padding:"7px 24px", display:"flex", justifyContent:"center", gap:36, alignItems:"center" }}>
+            {t.hints.map(s=>(
+              <span key={s} style={{ color:B.grey400, fontSize:9, fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase" }}>{s}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ═══ DISCUSSION OVERLAY ═══ */}
+      {showDiscuss && (
+        <div
+          onDoubleClick={() => setShowDiscuss(false)}
+          style={{
+            position:"fixed", inset:0, zIndex:100, cursor:"pointer",
+            background:"rgba(30,58,95,0.88)", backdropFilter:"blur(6px)",
+            animation:"discussIn 1.2s ease-out",
+            overflow:"hidden",
+          }}
+        >
+          {/* Title */}
+          <div style={{
+            position:"absolute", top:"50%", left:"50%",
+            animation:"titleFadeIn 1.4s ease-out both, titlePulse 6s ease-in-out infinite",
+            animationDelay:"0.3s, 1.7s",
+            textAlign:"center", zIndex:2,
+          }}>
+            <div style={{
+              color:B.white, fontSize:52, fontWeight:800,
+              letterSpacing:"-0.03em", lineHeight:1.1,
+              textShadow:"0 4px 30px rgba(0,0,0,0.3)",
+            }}>Let's discuss!</div>
+            <div style={{
+              color:B.amberLight, fontSize:13, fontWeight:600, marginTop:14,
+              letterSpacing:"0.15em", textTransform:"uppercase", opacity:0.7,
+            }}>{lang==="nl"?"Dubbelklik om te sluiten":"Double-click to close"}</div>
+          </div>
+
+          {/* Floating questions */}
+          {[
+            { text:"What is the most frustrating part about your job?", top:"8%", left:"6%", size:19, anim:"qFloat0", dur:"16s" },
+            { text:"If one part of your job would be made easier, what would that be?", top:"15%", right:"5%", size:17, anim:"qFloat1", dur:"19s" },
+            { text:"What would be the preferred outcomes of this change in your workflow?", bottom:"32%", left:"4%", size:16, anim:"qFloat2", dur:"18s" },
+            { text:"Do you have examples of other organisations that inspire FIOD?", top:"30%", left:"22%", size:15, anim:"qFloat3", dur:"20s" },
+            { text:"What examples of previous cases did you recognize as successful and made the breakthrough?", bottom:"10%", right:"6%", size:18, anim:"qFloat0", dur:"17.5s" },
+            { text:"In the system, where do you see the most opportunity for improvement?", bottom:"18%", left:"12%", size:20, anim:"qFloat1", dur:"16.5s" },
+            { text:"What are the biggest reasons/causes for cases to fail?", top:"6%", left:"42%", size:17, anim:"qFloat2", dur:"19.5s" },
+          ].map((q,i) => (
+            <div key={i} style={{
+              position:"absolute",
+              top:q.top||"auto", bottom:q.bottom||"auto",
+              left:q.left||"auto", right:q.right||"auto",
+              maxWidth:380,
+              background:`${B.amber}CC`,
+              color:B.navy,
+              fontSize:q.size,
+              fontWeight:700,
+              lineHeight:1.35,
+              padding:"14px 22px",
+              borderRadius:14,
+              animation:`qFadeIn 1s ease-out both, ${q.anim} ${q.dur} ease-in-out infinite`,
+              animationDelay:`${1 + i*0.35}s, ${1 + i*0.35}s`,
+              boxShadow:"0 4px 24px rgba(0,0,0,0.15)",
+              pointerEvents:"none",
+            }}>
+              {q.text}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<TBMLStakeholderMap />);
+</script>
+</body>
+</html>
